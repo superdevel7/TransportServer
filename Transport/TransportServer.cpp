@@ -5,11 +5,13 @@
 #include <winsock2.h>
 #include <string>
 
-#define BUF_SIZE			512
+#define BUF_SIZE			(64 << 10)
 #define CMD_GET_FILE		0
 #define CMD_SEND_FILE		1
 #define CMD_IS_EXIT_FILE	100
 #define CMD_CHK_DIR			101
+#define CMD_DATA_SIZE		10
+#define CMD_DATA			11
 
 char g_Password[] = { 'P', 'A', 'S', 'S', 'W', 'O', 'D' };
 
@@ -109,10 +111,13 @@ int MakeDirectory(std::string path)
 		return 0;
 }
 
-void DecryptData(char* data, int size) {
+void DecryptData(char* data, int size, DWORD &offset) {
 	for (int i = 0; i < size; i++) {
 		int nPasswordLength = sizeof(g_Password);
-		data[i] = data[i] ^ g_Password[i % nPasswordLength];
+		// data[i] = data[i] ^ g_Password[i % nPasswordLength];
+		data[i] = data[i] ^ g_Password[offset];
+		offset++;
+		if (offset >= nPasswordLength) offset = 0;
 	}
 }
 
@@ -207,24 +212,26 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				DWORD nBytesRecv = 0;
 				recv(ConnectSocket, (char*)&nFileSize, sizeof(DWORD), 0);
 				DWORD dwWait = 0;
+				DWORD offset = 0;
 				while (nFileSize > nBytesRecv)
 				{
 					char szBuffer[BUF_SIZE];
 					DWORD nBytesRead = recv(ConnectSocket, szBuffer, BUF_SIZE, 0);
+					// printf("nbytesread = %d\n", nBytesRead);
 					if (nBytesRead == 0)
 					{
-						send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
+						//send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
 						break;
 					}
-					DecryptData(szBuffer, nBytesRead);
+					DecryptData(szBuffer, nBytesRead, offset);
 					DWORD nBytesWritten = 0;
 					BOOL bResult = WriteFile(hFile, szBuffer, nBytesRead, &nBytesWritten, NULL);
 					if (bResult && nBytesWritten == 0)
 					{
-						send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
+						//send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
 						break;
 					}
-					send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
+					//send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
 					nBytesRecv += nBytesRead;
 				}
 				CloseHandle(hFile);
