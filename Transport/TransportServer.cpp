@@ -5,13 +5,14 @@
 #include <winsock2.h>
 #include <string>
 
-#define BUF_SIZE			(64 << 10)
+#define BUF_SIZE			(8 << 10)
 #define CMD_GET_FILE		0
 #define CMD_SEND_FILE		1
 #define CMD_IS_EXIT_FILE	100
 #define CMD_CHK_DIR			101
 #define CMD_DATA_SIZE		10
 #define CMD_DATA			11
+#define CMD_CONN_TEST		80
 
 char g_Password[] = { 'P', 'A', 'S', 'S', 'W', 'O', 'D' };
 
@@ -135,7 +136,6 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 		if ( bytesRecv == SOCKET_ERROR || bytesRecv == 0 || bytesRecv == WSAECONNRESET )
 		{
 			printf( "Connection Closed.\n");
-			break;
 		}
 		else
 		{
@@ -146,7 +146,7 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				if (hFile == INVALID_HANDLE_VALUE) 
 				{
 					send(ConnectSocket,(char*)&dwSize,sizeof(dwSize),0);
-					continue;
+					break;
 				}
 
 				dwSize = GetFileSize(hFile,NULL);
@@ -154,7 +154,7 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				{
 					send(ConnectSocket,(char*)&dwSize,sizeof(dwSize),0);
 					CloseHandle(hFile);
-					continue;
+					break;
 				}
 
 				send(ConnectSocket,(char*)&dwSize,sizeof(dwSize),0);
@@ -176,7 +176,6 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 			}
 			else if (sCommand.nCommand == CMD_IS_EXIT_FILE)
 			{
-
 				printf("-100\n");
 				char bufResponse[2];
 				if (FileExists(sCommand.cPathUNC)) {
@@ -195,16 +194,17 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 			}
 			else if (sCommand.nCommand == CMD_SEND_FILE)
 			{
+				DWORD dwFileCreated = 0;
 				if (MakeDirectory(sCommand.cPathUNC) == 0)
 				{
+					send(ConnectSocket, (char*)&dwFileCreated, sizeof(dwFileCreated), 0);
 					break;
 				}
-				DWORD dwFileCreated = 0;
 				HANDLE hFile = CreateFile(sCommand.cPathUNC, GENERIC_WRITE,	FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);  // no attr. template
 				if (hFile == INVALID_HANDLE_VALUE)
 				{
 					send(ConnectSocket, (char*)&dwFileCreated, sizeof(dwFileCreated), 0);
-					continue;
+					break;
 				}
 				dwFileCreated = 1;
 				send(ConnectSocket, (char*)&dwFileCreated, sizeof(dwFileCreated), 0);
@@ -213,9 +213,9 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				recv(ConnectSocket, (char*)&nFileSize, sizeof(DWORD), 0);
 				DWORD dwWait = 0;
 				DWORD offset = 0;
+				char szBuffer[BUF_SIZE];
 				while (nFileSize > nBytesRecv)
 				{
-					char szBuffer[BUF_SIZE];
 					DWORD nBytesRead = recv(ConnectSocket, szBuffer, BUF_SIZE, 0);
 					// printf("nbytesread = %d\n", nBytesRead);
 					if (nBytesRead == 0)
@@ -226,7 +226,7 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 					DecryptData(szBuffer, nBytesRead, offset);
 					DWORD nBytesWritten = 0;
 					BOOL bResult = WriteFile(hFile, szBuffer, nBytesRead, &nBytesWritten, NULL);
-					if (bResult && nBytesWritten == 0)
+					if (!bResult || nBytesWritten == 0)
 					{
 						//send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
 						break;
@@ -251,7 +251,12 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				send(ConnectSocket, (char*)&dwSize, sizeof(dwSize), 0);
 				send(ConnectSocket, bufResponse, 2, 0);
 			}
+			else if (sCommand.nCommand == CMD_CONN_TEST)
+			{
+			break;
+			}
 		}
+		break;
 	}
 
 	closesocket(ConnectSocket);
@@ -365,6 +370,7 @@ int main( int argc, char **argv )
 	{
 		struct sockaddr_in fsin;
 		int fsinlen = sizeof(fsin);
+		printf("listening...\n");
 		SOCKET sckConnected = accept(sckListener,(struct sockaddr *)&fsin,&fsinlen);
 		if( sckConnected == INVALID_SOCKET )
 		{
@@ -383,7 +389,9 @@ int main( int argc, char **argv )
 			exit(1);
 		}
 
-		SetKeepAlive(sckConnected,TRUE);
+		printf("One connection received\n");
+
+		// SetKeepAlive(sckConnected,TRUE);
 		ProcessSocket(sckConnected);
 	}
 
