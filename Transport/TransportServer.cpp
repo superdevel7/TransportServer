@@ -5,7 +5,7 @@
 #include <winsock2.h>
 #include <string>
 
-#define BUF_SIZE			(64 << 10)
+#define BUF_SIZE			(8 << 10)
 #define CMD_GET_FILE		0
 #define CMD_SEND_FILE		1
 #define CMD_IS_EXIT_FILE	100
@@ -216,7 +216,9 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				while (nFileSize > nBytesRecv)
 				{
 					char szBuffer[BUF_SIZE];
-					DWORD nBytesRead = recv(ConnectSocket, szBuffer, BUF_SIZE, 0);
+					DWORD toRead = BUF_SIZE;
+					if (nFileSize - nBytesRecv < toRead) toRead = nFileSize - nBytesRecv;
+					DWORD nBytesRead = recv(ConnectSocket, szBuffer, toRead, 0);
 					// printf("nbytesread = %d\n", nBytesRead);
 					if (nBytesRead == 0)
 					{
