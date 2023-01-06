@@ -158,9 +158,9 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 				}
 
 				send(ConnectSocket,(char*)&dwSize,sizeof(dwSize),0);
+				char cRead[512];
 				do
 				{
-					char cRead[512];
 					DWORD nBytesRead = 0;
 					BOOL bResult = ReadFile(hFile,cRead,512,&nBytesRead,NULL); 
 					// Check for end of file. 
@@ -236,6 +236,7 @@ DWORD WINAPI ProcessThread(LPVOID lpParam)
 					//send(ConnectSocket, (char*)&dwWait, sizeof(dwWait), 0);
 					nBytesRecv += nBytesRead;
 				}
+				send(ConnectSocket, (char*)&nBytesRecv, sizeof(nBytesRecv), 0);
 				CloseHandle(hFile);
 			}
 			else if (sCommand.nCommand == CMD_CHK_DIR)//Check output directory.
